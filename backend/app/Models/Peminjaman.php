@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Peminjaman extends Model
 {
@@ -33,6 +34,7 @@ class Peminjaman extends Model
         'peminjam:id,nama,email,jenis_peminjam,nomor_induk',
         'pemroses:id,nama',
         'detail.alat:id,kode,nama',
+        'pengembalian',
     ];
 
     // Hanya isian formulir yang boleh diisi massal. user_id, no_transaksi, status, dan
@@ -63,6 +65,11 @@ class Peminjaman extends Model
         return $this->hasMany(PeminjamanDetail::class);
     }
 
+    public function pengembalian(): HasOne
+    {
+        return $this->hasOne(Pengembalian::class, 'peminjaman_id');
+    }
+
     public function labelStatus(): string
     {
         return self::LABEL_STATUS[$this->status] ?? $this->status;
@@ -81,13 +88,17 @@ class Peminjaman extends Model
 
     public function hariTerlambat(): int
     {
-        if (!$this->sedangTerlambat()) {
+        if (! $this->sedangTerlambat()) {
             return 0;
         }
 
         return (int) abs(today()->diffInDays($this->tanggal_jatuh_tempo));
     }
-    /** Sisa hari sampai jatuh tempo (negatif = sudah lewat). Hanya untuk peminjaman yang sedang berjalan. */
+
+    /**
+     * Sisa hari sampai jatuh tempo (negatif = sudah lewat). Hanya bermakna untuk
+     * peminjaman yang sedang berjalan, selain itu null. Dipakai Flutter untuk pengingat visual.
+     */
     public function sisaHari(): ?int
     {
         if ($this->status !== self::STATUS_DISETUJUI) {

@@ -14,7 +14,7 @@ class PeminjamanResource extends JsonResource
         return [
             'id' => $this->id,
             'no_transaksi' => $this->no_transaksi,
-            'peminjam' => $this->whenLoaded('peminjam', fn() => [
+            'peminjam' => $this->whenLoaded('peminjam', fn () => [
                 'id' => $this->peminjam->id,
                 'nama' => $this->peminjam->nama,
                 'email' => $this->peminjam->email,
@@ -33,19 +33,32 @@ class PeminjamanResource extends JsonResource
             'sisa_hari' => $this->sisaHari(),
             'status_tampilan' => $terlambat ? 'Terlambat' : $this->labelStatus(),
             'alasan_penolakan' => $this->alasan_penolakan,
-            'diproses_oleh' => $this->whenLoaded('pemroses', fn() => [
+            'diproses_oleh' => $this->whenLoaded('pemroses', fn () => [
                 'id' => $this->pemroses->id,
                 'nama' => $this->pemroses->nama,
             ]),
             'diproses_pada' => $this->diproses_pada?->toIso8601String(),
-            'total_item' => $this->whenLoaded('detail', fn() => (int) $this->detail->sum('jumlah')),
-            'items' => $this->whenLoaded('detail', fn() => $this->detail->map(fn($d) => [
+            'total_item' => $this->whenLoaded('detail', fn () => (int) $this->detail->sum('jumlah')),
+            'items' => $this->whenLoaded('detail', fn () => $this->detail->map(fn ($d) => [
                 'id' => $d->id,
                 'alat_id' => $d->alat_id,
                 'kode' => $d->alat?->kode,
                 'nama' => $d->alat?->nama,
                 'jumlah' => $d->jumlah,
             ])->values()),
+            'tanggal_kembali' => $this->whenLoaded('pengembalian', fn () => $this->pengembalian?->tanggal_kembali?->toIso8601String()),
+            'total_denda' => $this->whenLoaded('pengembalian', fn () => (float) ($this->pengembalian?->total_denda ?? 0)),
+            'pengembalian' => $this->whenLoaded('pengembalian', fn () => $this->pengembalian ? [
+                'id' => $this->pengembalian->id,
+                'tanggal_kembali' => $this->pengembalian->tanggal_kembali?->toIso8601String(),
+                'petugas_id' => $this->pengembalian->petugas_id,
+                'hari_terlambat' => (int) $this->pengembalian->hari_terlambat,
+                'tarif_per_hari_saat_itu' => (float) $this->pengembalian->tarif_per_hari_saat_itu,
+                'denda_terlambat' => (float) $this->pengembalian->denda_terlambat,
+                'denda_kerusakan' => (float) $this->pengembalian->denda_kerusakan,
+                'total_denda' => (float) $this->pengembalian->total_denda,
+                'catatan' => $this->pengembalian->catatan,
+            ] : null),
         ];
     }
 }

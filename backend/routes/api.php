@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\KategoriController;
 use App\Http\Controllers\Api\PenggunaController;
 use App\Http\Controllers\Api\PeminjamanController;
+use App\Http\Controllers\Api\PengembalianController;
 use Illuminate\Support\Facades\Route;
 
 // Publik (dibatasi 10 permintaan per menit per IP)
@@ -44,6 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/peminjaman', [PeminjamanController::class, 'index']);
         Route::post('/peminjaman/{peminjaman}/setujui', [PeminjamanController::class, 'setujui']);
         Route::post('/peminjaman/{peminjaman}/tolak', [PeminjamanController::class, 'tolak']);
+        Route::post('/peminjaman/{peminjaman}/pengembalian', [PengembalianController::class, 'store']);
     });
 
     // Khusus admin

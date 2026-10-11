@@ -8,6 +8,7 @@ use App\Models\Peminjaman;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -112,62 +113,32 @@ class PeminjamanService
      */
     public function setujui(Peminjaman $peminjaman, User $petugas): Peminjaman
     {
-        $hasil = DB::transaction(function () use ($peminjaman, $petugas) {
-            // 1. Kunci baris pengajuan lalu baca status TERBARU (bukan status saat route dibuka).
-            //    Dua petugas yang menyetujui pengajuan yang sama akan antre di sini.
-            $p = $this->kunciDanPastikanMenunggu($peminjaman, 'disetujui');
+        // Stored procedure mengelola transaksinya sendiri; jangan bungkus dengan DB::transaction().
+        try {
+            DB::statement('CALL sp_setujui_peminjaman(?, ?)', [
+                (int) $peminjaman->id,
+                (int) $petugas->id,
+            ]);
+        } catch (QueryException $e) {
+            $pesan = $e->getMessage();
 
-            $detail = $p->detail()->orderBy('alat_id')->get();
-
-            // 2. Kunci semua baris alat yang terlibat, urut berdasarkan id. Urutan yang selalu sama
-            //    mencegah dua proses saling menunggu (deadlock).
-            $alat = Alat::withTrashed()
-                ->whereIn('id', $detail->pluck('alat_id'))
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            // 3. Periksa SEMUA alat lebih dulu, baru ubah. Jadi kegagalan tidak meninggalkan perubahan sebagian.
-            $masalah = [];
-            foreach ($detail as $d) {
-                $a = $alat->get($d->alat_id);
-
-                if (! $a || ! $a->aktif) {
-                    $masalah[] = 'Alat #'.$d->alat_id.' sudah tidak aktif.';
-                } elseif ($a->stok_tersedia < $d->jumlah) {
-                    $masalah[] = "Stok {$a->nama} tidak cukup: diminta {$d->jumlah}, tersedia {$a->stok_tersedia}.";
-                }
+            if (str_contains($pesan, 'PA:NOT_FOUND')) {
+                abort(404, 'Pengajuan peminjaman tidak ditemukan.');
+            }
+            if (str_contains($pesan, 'PA:NOT_PENDING')) {
+                throw ApiException::konflik('Pengajuan bukan lagi berstatus menunggu.');
+            }
+            if (str_contains($pesan, 'PA:STOCK_OR_INACTIVE')) {
+                throw ApiException::konflik('Pengajuan tidak dapat disetujui karena stok tidak cukup atau alat tidak aktif.');
+            }
+            if (str_contains($pesan, 'PA:ITEMS_INVALID')) {
+                throw ApiException::konflik('Rincian alat pada pengajuan tidak valid.');
             }
 
-            if ($masalah) {
-                throw ApiException::konflik(
-                    'Pengajuan tidak dapat disetujui karena stok tidak mencukupi atau alat tidak aktif.',
-                    ['stok' => $masalah]
-                );
-            }
+            throw $e;
+        }
 
-            // 4. Kurangi stok. stok_total tidak berubah, jadi CHECK di database tetap terpenuhi.
-            foreach ($detail as $d) {
-                $a = $alat->get($d->alat_id);
-                $a->forceFill([
-                    'stok_tersedia' => $a->stok_tersedia - $d->jumlah,
-                    'stok_dipinjam' => $a->stok_dipinjam + $d->jumlah,
-                ])->save();
-            }
-
-            // 5. Catat keputusan.
-            $p->forceFill([
-                'status' => Peminjaman::STATUS_DISETUJUI,
-                'diproses_oleh' => $petugas->id,
-                'diproses_pada' => now(),
-                'alasan_penolakan' => null,
-            ])->save();
-
-            return $p;
-        }, 3); // 3 = diulang otomatis bila terjadi deadlock
-
-        return $hasil->load(Peminjaman::RELASI);
+        return $peminjaman->fresh()->load(Peminjaman::RELASI);
     }
 
     /* ------------------------------------------------------------------ *
