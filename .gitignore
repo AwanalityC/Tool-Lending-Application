@@ -1,0 +1,12 @@
+# Laravel environment files and secrets
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Generated dependencies and files
+backend/vendor/
+backend/node_modules/
+backend/storage/*.key
+backend/storage/logs/*
+backend/.phpunit.result.cache
+backend/bootstrap/cache/*.php
